@@ -13,20 +13,15 @@ library(xlsx)
 library(magrittr)
 library(RPostgres)
 
-con = DBI::dbConnect(odbc::odbc(),"PostgreSAKiRP")
-waeo = dbReadTable(con,"waeos") %>% 
-  filter(active == 1)
-district = dbReadTable(con, "districts")
-ward = dbReadTable(con, "wards")
-
 hhs_general_survey = readxl::read_xlsx(paste0("C:/Users/tnkil/OneDrive/Enabel",
 " - SAKiRP/M&E/Data Collection/S01 - HH Survey/Data Analysis/Calculation Sheets ",
 "2020/Houshold Survey 2020 Sample Sets.xlsx"),
 sheet = "HHS general sample")
 
-hhs_general_survey_beneficiaries_male = hhs_general_survey %>%
+beneficiary_by_sex = function(sex,data){
+  data %>%
   filter(`Is the respondent a member of a group or not?` == "Member of a group",
-         `Sex of respondent` == "Male",
+         `Sex of respondent` == sex,
          `Phone number of HHH or other member of the HH.`!=999) %>% 
   mutate(`Status (X/V)` = "",`# B` = "") %>% 
   rename(Name = `Select beneficiary name`,
@@ -37,6 +32,20 @@ hhs_general_survey_beneficiaries_male = hhs_general_survey %>%
   select(Name,`Phone 1`,`Phone 2`,Sex ,District, Ward, Village,WAEO,
          `Status (X/V)`,`# B`)
 
+}
+
+create_table_data = function(data){
+  kableExtra::kbl(data, booktabs = T) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "scale_down")) %>% 
+  kableExtra::column_spec(column = c(1:10), border_left = T,border_right = T) %>% 
+  kableExtra::column_spec(column = c(9:10), width = "5cm")
+}
+
+hhs_general_survey_beneficiaries_male = beneficiary_by_sex("Male",hhs_general_survey)
+
+hhs_general_survey_beneficiaries_female = beneficiary_by_sex("Female",hhs_general_survey)
+  
+  
 hhs_non_beneficiaries_male = hhs_general_survey %>%
   filter(`Is the respondent a member of a group or not?` == "Not a member of a group",
          `Sex of respondent` == "Male",
@@ -54,24 +63,22 @@ hhs_non_beneficiaries_male = hhs_general_survey %>%
 
 # MALE BENEFICIARIES LIST: Target 73 calls
 ***
-```{r beneficiaries}
-
-
-kableExtra::kbl(hhs_general_survey_beneficiaries_male, booktabs = T) %>%
-  kableExtra::kable_styling(latex_options = c("striped", "scale_down")) %>% 
-  kableExtra::column_spec(column = c(1:10), border_left = T,border_right = T) %>% 
-  kableExtra::column_spec(column = c(9:10), width = "5cm")
+```{r beneficiaries-male}
+create_table_data(hhs_general_survey_beneficiaries_male)
 ```
 \newpage
 
 # MALE NON-BENEFICIARIES: Target 73 calls
 
-```{r non-beneficiaries}
+```{r non-beneficiaries-male}
 
-kableExtra::kbl(hhs_non_beneficiaries_male, booktabs = T) %>%
-  kableExtra::kable_styling(latex_options = c("striped", "scale_down")) %>% 
-  kableExtra::column_spec(column = c(1:10), border_left = T,border_right = T) %>% 
-  kableExtra::column_spec(column = c(9:10), width = "5cm")
+create_table_data(hhs_non_beneficiaries_male)
+```
+
+# FEMALE BENEFICIARIES: Target 72
+
+```{r beneficiaris-fem}
+create_table_data(hhs_general_survey_beneficiaries_female)
 ```
 
 
