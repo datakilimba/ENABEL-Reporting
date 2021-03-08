@@ -26,11 +26,19 @@ get_data = function(data,before,after,activity,crop){
 }
 
 tidy_bean_marketing = function(bean_data_marketing){
+  
+  #total_sold = sum(as.double(bean_data_marketing$`survey/marketing/sold`))
+  
   bean_data_marketing %>% 
     rename(weeding_cost = `survey/marketing/price_weeding`,
-           harvesting_cost = `survey/marketing/price_harvesting`) %>% 
+           harvesting_cost = `survey/marketing/price_harvesting`,
+           sold_kg = `survey/marketing/sold`,
+           sale_price = `survey/marketing/price`) %>% 
     mutate(weeding_cost = as.double(weeding_cost),
-           harvesting_cost = as.double(harvesting_cost))
+           harvesting_cost = as.double(harvesting_cost),
+           sold_kg = as.double(sold_kg),
+           sale_price = as.double(sale_price),
+           price_per_kg = sale_price/sold_kg)
 }
 
 tidy_bean_landprep = function(bean_data_landprep){
@@ -62,8 +70,9 @@ tidy_bean_landprep = function(bean_data_landprep){
 }
 
 fix_outliers = function(data,variable){
+  browser()
   q = quantile(variable,na.rm = T,probs = c(.25,.75))
-  iqr = IQR(variable)
+  iqr = IQR(variable,na.rm = T)
   upper_range = q[2]+1.5*iqr
   lower_range = q[1]-1.5*iqr
   

@@ -52,7 +52,9 @@ plant_acre = mean(fixed_plant_acre_data$planting_acre)
 fert_labor_acre = mean(fixed_labor_acre_data$fert_labor_acre)
 
 plant_fert_application_acre = fert_labor_acre+plant_acre
+
 #################################################################
+
 beans_data_marketing = get_data(data = bt_data,
                                 before = "2020-10-30T18:09:26.233+03",
                                 after = "2019-10-01T13:07:12.798+03",
@@ -61,6 +63,13 @@ beans_data_marketing = get_data(data = bt_data,
 
 fixed_harvest_data = fix_outliers(beans_data_marketing,
                             beans_data_marketing$harvesting_cost)
+
+fixed_price_data = fix_outliers(beans_data_marketing,
+                                beans_data_marketing$price_per_kg) %>% 
+  mutate(
+    weight = sold_kg/sum(sold_kg),
+    weighted_price = price_per_kg*weight
+    )
 
 fixed_weed_data = fix_outliers(beans_data_marketing,
                                beans_data_marketing$weeding_cost)
@@ -78,7 +87,7 @@ beans_total_cost_acre = seed_acre+
 
 beans_total_cost_hectare = beans_total_cost_acre*2.47105381
 
-#from 2020 IPTT yield value for beans
+# from 2020 IPTT yield and price value for beans
 bean_yield_hectare_kg = 536
 bean_price_kg = 1827
 
