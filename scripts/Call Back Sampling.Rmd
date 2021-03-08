@@ -1,8 +1,8 @@
 ---
 output:
+  pdf_document: default
   html_document:
     df_print: paged
-  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -13,11 +13,115 @@ library(xlsx)
 library(magrittr)
 library(RPostgres)
 
-hhs_general_survey = readxl::read_xlsx(paste0("C:/Users/tnkil/OneDrive/Enabel",
+path = paste0("C:/Users/tnkil/OneDrive/Enabel",
 " - SAKiRP/M&E/Data Collection/S01 - HH Survey/Data Analysis/Calculation Sheets ",
-"2020/Houshold Survey 2020 Sample Sets.xlsx"),
-sheet = "HHS general sample")
+"2020/Houshold Survey 2020 Sample Sets.xlsx")
 
+con = DBI::dbConnect(odbc::odbc(),"PostgreSAKiRP")
+wards = dbReadTable(con,"wards")
+waeos = dbReadTable(con,"waeos")
+
+get_data = function(path,sheet){
+  readxl::read_xlsx(path,
+                    sheet = sheet)
+}
+
+hhs_general_survey = get_data(path,"HHS general sample")
+hhs_fhhh_data = get_data(path,"HHS FHHH sample")
+hhs_struc_data = get_data(path,"HHS struc sample")
+
+hhs_struc_by_status = function(data){
+  data %>% 
+    filter(`Phone number of HHH or other member of the HH.` != 999) %>% 
+    mutate(`Status (X/V)` = "",`# B` = "") %>% 
+    rename(`Phone 1` = `Phone number of HHH or other member of the HH.`,
+           `Phone 2` = `2nd phone number of HHH or other member of the HH.`,
+           Sex = `Sex of respondent`) %>% 
+    mutate(`Phone 2` = na_if(`Phone 2`,999),
+           Name = `Select the farmer's name`,`S/N` = row_number()) %>% 
+    select(`S/N`,Name,`Phone 1`,`Phone 2`,Sex ,District, Ward, Village,WAEO,
+         `Status (X/V)`,`# B`)
+}
+
+odk_waeos = waeos %>% 
+  mutate(list_name = "enumname",name = id,`label::English` = waeo,
+         `label::Swahili` = `label::English`,cf = ward_id) %>% 
+  select(list_name,name,`label::English`,`label::Swahili`,cf) %>% 
+  filter(!(is.na(cf))) %>% 
+  xlsx::write.xlsx("../output/odk-waeos.xlsx")
+
+hhs_fhhh_odk = function(data){
+  data %>% 
+    filter(`Phone number of HHH or other member of the HH.` != 999) %>% 
+    mutate(Name = if_else(`Is the respondent a member of a group or not?` ==
+                            "Member of a group" & `Select beneficiary name` != 
+                            "Another female head of household (beneficiary)",
+                          `Select beneficiary name`,
+                          paste0(`First name of the respondent`," ",
+                                 `Surname of the respondent`))) %>% 
+    mutate(Name = if_else(Name == "NA NA" | is.na(Name),`Name of female head of household (beneficiary)`,Name)) %>% 
+    mutate(list_name = "fhhh",name=`_uuid`,`label::English` = Name,`label::Swahili` = `label::English`) %>% 
+    left_join(wards, by = c("Ward"="ward")) %>% 
+    mutate(cf = id) %>% 
+    select(list_name,name,`label::English`,`label::Swahili`,cf)
+}
+
+hhs_struc_odk = function(data){
+  data %>% 
+    filter(`Phone number of HHH or other member of the HH.` != 999) %>% 
+    mutate(list_name = "structured",name=`_uuid`,`label::English` = `Select the farmer's name`,`label::Swahili` = `label::English`) %>% 
+    left_join(wards, by = c("Ward"="ward")) %>% 
+    mutate(cf = id) %>% 
+    select(list_name,name,`label::English`,`label::Swahili`,cf) 
+}
+
+hhs_ben_odk = function(data){
+  data %>% 
+    filter(`Is the respondent a member of a group or not?` == "Member of a group",
+           `Phone number of HHH or other member of the HH.`!=999) %>% 
+    mutate(list_name = "beneficiaries",name=`_uuid`,`label::English` =`Select beneficiary name`) %>% 
+    mutate(`label::English` = if_else(`label::English`=="Another female head of household (beneficiary)",`Name of female head of household (beneficiary)`,
+                                      `label::English`), `label::Swahili` = `label::English`) %>% 
+    left_join(wards, by = c("Ward"="ward")) %>% 
+    mutate(cf = id) %>% 
+    select(list_name,name,`label::English`,`label::Swahili`,cf)
+}
+
+
+hhs_nonben_odk = function(data){
+  data %>% 
+    filter(`Is the respondent a member of a group or not?` == "Not a member of a group",
+           `Phone number of HHH or other member of the HH.`!=999) %>% 
+    mutate(list_name = "nonbeneficiaries",name=`_uuid`,`label::English` = paste0(`First name of the respondent`," ",`Surname of the respondent`),`label::Swahili` = `label::English`) %>% 
+    left_join(wards, by = c("Ward"="ward")) %>% 
+    mutate(cf = id) %>% 
+    select(list_name,name,`label::English`,`label::Swahili`,cf)
+}
+
+hhs_fhhh_by_status = function(data){
+  data %>%
+    filter(`Phone number of HHH or other member of the HH.` != 999) %>% 
+    mutate(`Status (X/V)` = "",`# B` = "") %>% 
+    rename(`Phone 1` = `Phone number of HHH or other member of the HH.`,
+           `Phone 2` = `2nd phone number of HHH or other member of the HH.`,
+           Sex = `Sex of respondent`) %>% 
+    mutate(`Phone 2` = na_if(`Phone 2`,999),
+           Name = if_else(`Is the respondent a member of a group or not?` ==
+                            "Member of a group" & `Select beneficiary name` != 
+                            "Another female head of household (beneficiary)",
+                          `Select beneficiary name`,
+                          paste0(`First name of the respondent`," ",
+                                 `Surname of the respondent`))) %>% 
+    mutate(Name = if_else(Name == "NA NA" | is.na(Name),`Name of female head of household (beneficiary)`,Name),
+           `S/N` = row_number()) %>% 
+  select(`S/N`,Name,`Phone 1`,`Phone 2`,Sex ,District, Ward, Village,WAEO,
+         `Status (X/V)`,`# B`) %>% 
+    filter(!is.na(Name))
+  
+}
+
+hhs_fhhh_with_phone = hhs_fhhh_by_status(hhs_fhhh_data)
+  
 beneficiary_by_sex = function(sex,data){
   data %>%
   filter(`Is the respondent a member of a group or not?` == "Member of a group",
@@ -28,8 +132,10 @@ beneficiary_by_sex = function(sex,data){
          `Phone 1` = `Phone number of HHH or other member of the HH.`,
          `Phone 2` = `2nd phone number of HHH or other member of the HH.`,
          Sex = `Sex of respondent`) %>% 
-  mutate(`Phone 2` = na_if(`Phone 2`,999)) %>% 
-  select(Name,`Phone 1`,`Phone 2`,Sex ,District, Ward, Village,WAEO,
+  mutate(`Phone 2` = na_if(`Phone 2`,999),
+         `S/N` = row_number(),
+         Name = if_else(Name == "Another female head of household (beneficiary)", `Name of female head of household (beneficiary)`,Name)) %>% 
+  select(`S/N`,Name,`Phone 1`,`Phone 2`,Sex ,District, Ward, Village,WAEO,
          `Status (X/V)`,`# B`)
 
 }
@@ -41,24 +147,36 @@ create_table_data = function(data){
   kableExtra::column_spec(column = c(9:10), width = "5cm")
 }
 
-hhs_general_survey_beneficiaries_male = beneficiary_by_sex("Male",hhs_general_survey)
+hhs_general_survey_beneficiaries_male = beneficiary_by_sex("Male",hhs_general_survey) 
 
 hhs_general_survey_beneficiaries_female = beneficiary_by_sex("Female",hhs_general_survey)
   
-  
-hhs_non_beneficiaries_male = hhs_general_survey %>%
+non_beneficiary_by_sex = function(sex,data){
+  data %>%
   filter(`Is the respondent a member of a group or not?` == "Not a member of a group",
-         `Sex of respondent` == "Male",
+         `Sex of respondent` == sex,
          `Phone number of HHH or other member of the HH.`!=999) %>% 
   mutate(`Status (X/V)` = "",`# B` = "",
          Name = paste0(`First name of the respondent`," ",`Surname of the respondent`)) %>% 
   rename(`Phone 1` = `Phone number of HHH or other member of the HH.`,
          `Phone 2` = `2nd phone number of HHH or other member of the HH.`,
          Sex = `Sex of respondent`) %>% 
-  mutate(`Phone 2` = na_if(`Phone 2`,999)) %>% 
-  select(Name,`Phone 1`,`Phone 2`,Sex ,District, Ward, Village,WAEO,
+  mutate(`Phone 2` = na_if(`Phone 2`,999),
+         `S/N` = row_number()) %>% 
+  select(`S/N`,Name,`Phone 1`,`Phone 2`,Sex ,District, Ward, Village,WAEO,
          `Status (X/V)`,`# B`)
 
+}
+  
+hhs_non_beneficiaries_male = non_beneficiary_by_sex("Male",hhs_general_survey)
+hhs_non_beneficiaries_female = non_beneficiary_by_sex("Female",hhs_general_survey)
+
+odk_data = rbind(hhs_fhhh_odk(hhs_fhhh_data),
+      hhs_ben_odk(hhs_general_survey),
+      hhs_nonben_odk(hhs_general_survey),
+      hhs_struc_odk(hhs_struc_data))
+
+xlsx::write.xlsx(odk_data,"../output/odk-callbacks.xlsx")
 ```
 
 # MALE BENEFICIARIES LIST: Target 73 calls
@@ -77,9 +195,21 @@ create_table_data(hhs_non_beneficiaries_male)
 
 # FEMALE BENEFICIARIES: Target 72
 
-```{r beneficiaris-fem}
+```{r beneficiaries-fem}
 create_table_data(hhs_general_survey_beneficiaries_female)
 ```
+# FEMALE NON-BENEFICIARIES: Target 72
 
+```{r non-beneficiaris-fem}
+create_table_data(hhs_non_beneficiaries_female)
+```
+# FEMALE HEADS OF HOUSE
+```{r fhhh}
+create_table_data(hhs_fhhh_with_phone)
+```
+# STRUCTURED MARKETING
+```{r struc}
+create_table_data(hhs_struc_by_status(hhs_struc_data))
+```
 
 
