@@ -7,7 +7,6 @@ get_kobo_data = function(form_id){
 }
 
 get_data = function(data,before,after,activity,crop){
-  browser()
   data_ = data %>% 
     filter(endtime >= as.POSIXct(after),
            endtime <= as.POSIXct(before),
@@ -70,7 +69,6 @@ tidy_bean_landprep = function(bean_data_landprep){
 }
 
 fix_outliers = function(data,variable){
-  browser()
   q = quantile(variable,na.rm = T,probs = c(.25,.75))
   iqr = IQR(variable,na.rm = T)
   upper_range = q[2]+1.5*iqr
